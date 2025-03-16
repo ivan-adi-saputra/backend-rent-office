@@ -21,6 +21,7 @@ class ViewBookingResource extends JsonResource
             'booking_trx_id' => $this->booking_trx_id,
             'is_paid' => $this->is_paid,
             'started_at' => $this->started_at,
+            'ended_at' => $this->ended_at,
             'total_amount' => $this->total_amount,
             'duration' => $this->duration,
             'office' => new OfficeSpaceResource($this->whenLoaded('officeSpace'))
