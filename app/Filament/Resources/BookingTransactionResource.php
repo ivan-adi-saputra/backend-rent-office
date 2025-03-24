@@ -17,6 +17,8 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\Notification;
+use Twilio\Rest\Client;
 
 class BookingTransactionResource extends Resource
 {
@@ -29,45 +31,45 @@ class BookingTransactionResource extends Resource
         return $form
             ->schema([
                 TextInput::make('name')
-                ->required()
-                ->maxLength(255),
+                    ->required()
+                    ->maxLength(255),
 
                 TextInput::make('booking_trx_id')
-                ->required()
-                ->maxLength(255),
+                    ->required()
+                    ->maxLength(255),
 
                 TextInput::make('phone_number')
-                ->required()
-                ->maxLength(255),
+                    ->required()
+                    ->maxLength(255),
 
                 TextInput::make('total_amount')
-                ->required()
-                ->numeric()
-                ->prefix('IDR'),
+                    ->required()
+                    ->numeric()
+                    ->prefix('IDR'),
 
                 TextInput::make('duration')
-                ->required()
-                ->numeric()
-                ->prefix('Days'),
+                    ->required()
+                    ->numeric()
+                    ->prefix('Days'),
 
                 DatePicker::make('started_at')
-                ->required(),
+                    ->required(),
 
                 DatePicker::make('ended_at')
-                ->required(),
+                    ->required(),
 
                 Select::make('is_paid')
-                ->options([
-                    true => 'Paid',
-                    false => 'Not Paid',
-                ])
-                ->required(),
+                    ->options([
+                        true => 'Paid',
+                        false => 'Not Paid',
+                    ])
+                    ->required(),
 
                 Select::make('office_space_id')
-                ->relationship('officeSpace', 'name')
-                ->searchable()
-                ->preload()
-                ->required(),
+                    ->relationship('officeSpace', 'name')
+                    ->searchable()
+                    ->preload()
+                    ->required(),
             ]);
     }
 
@@ -76,29 +78,60 @@ class BookingTransactionResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('booking_trx_id')
-                ->searchable(),
+                    ->searchable(),
 
                 TextColumn::make('name')
-                ->searchable(),
+                    ->searchable(),
 
                 TextColumn::make('officeSpace.name'),
 
                 TextColumn::make('started_at')
-                ->date(),
+                    ->date(),
 
                 IconColumn::make('is_paid')
-                ->boolean()
-                ->trueColor('success')
-                ->falseColor('danger')
-                ->trueIcon('heroicon-o-check-circle')
-                ->falseIcon('heroicon-o-x-circle')
-                ->label('Sudah Bayar?'),
+                    ->boolean()
+                    ->trueColor('success')
+                    ->falseColor('danger')
+                    ->trueIcon('heroicon-o-check-circle')
+                    ->falseIcon('heroicon-o-x-circle')
+                    ->label('Sudah Bayar?'),
             ])
             ->filters([
                 //
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),
+
+                Tables\Actions\Action::make('approve')
+                    ->label('Approve')
+                    ->action(function (BookingTransaction $record) {
+                        $record->is_paid = true;
+                        $record->save();
+
+                        Notification::make()
+                            ->title('Booking Approved')
+                            ->success()
+                            ->bpdy("The booking has been successfully approved")
+                            ->send();
+
+                        $sid = getenv("TWILIO_ACCOUNT_SID");
+                        $token = getenv("TWILIO_AUTH_TOKEN");
+                        $twilio = new Client($sid, $token);
+
+                        $messageBody = "Hi {$record->name}, Terima kasih telah booking kantor.";
+                        $messageBody .= "Pesanan kantor {$record->officeSpace->name} sedang kami proses";
+
+                        $message = $twilio->messages->create(
+                            "+{$record->phone_number}",
+                            [
+                                "body" => $messageBody,
+                                "from" => getenv("TWILIO_PHONE_NUMBER"),
+                            ]
+                        );
+                    })
+                    ->color("success")
+                    ->requiresConfirmation()
+                    ->visible(fn(BookingTransaction $record) => !$record->is_paid),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
